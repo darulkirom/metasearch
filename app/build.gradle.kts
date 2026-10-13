@@ -22,6 +22,15 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+    
+    signingConfigs {
+          debug {
+          storeFile file('testkey.keystore')
+           storePassword 'android'
+            keyAlias 'testkey'
+           keyPassword 'android'
+       }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
