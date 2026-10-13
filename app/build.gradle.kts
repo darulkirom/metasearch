@@ -19,18 +19,18 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig signingConfigs.debug
+            signingConfig = signingConfigs.getByName("aospTest")
         }
     }
     
     signingConfigs {
-          debug {
-          storeFile file('testkey.keystore')
-           storePassword 'android'
-            keyAlias 'testkey'
-           keyPassword 'android'
-       }
+    create("aospTest") {
+        storeFile = file("testkey.keystore")
+        storePassword = "android"
+        keyAlias = "testkey"
+        keyPassword = "android"
     }
+}
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
