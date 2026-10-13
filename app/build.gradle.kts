@@ -13,7 +13,7 @@ android {
 
     signingConfigs {
 
-        create("aospTest") {
+        create("debug") {
 
             storeFile = file("testkey.keystore")
 
@@ -54,7 +54,7 @@ android {
             isMinifyEnabled = false
 
             signingConfig =
-                signingConfigs.getByName("aospTest")
+                signingConfigs.getByName("debug")
 
         }
 
