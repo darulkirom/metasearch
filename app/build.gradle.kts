@@ -5,45 +5,80 @@ plugins {
 }
 
 android {
+
     namespace = "com.example.metasearch"
+
     compileSdk = 35
 
-    defaultConfig {
-        applicationId = "com.example.metasearch"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+
+    signingConfigs {
+
+        create("aospTest") {
+
+            storeFile = file("testkey.keystore")
+
+            storePassword = "android"
+
+            keyAlias = "testkey"
+
+            keyPassword = "android"
+
+        }
+
     }
+
+
+    defaultConfig {
+
+        applicationId = "com.example.metasearch"
+
+        minSdk = 26
+
+        targetSdk = 35
+
+        versionCode = 1
+
+        versionName = "1.0"
+
+    }
+
 
     buildTypes {
+
         release {
+
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("aospTest")
+
+            signingConfig =
+                signingConfigs.getByName("aospTest")
+
         }
+
     }
-    
-    signingConfigs {
-    create("aospTest") {
-        storeFile = file("testkey.keystore")
-        storePassword = "android"
-        keyAlias = "testkey"
-        keyPassword = "android"
-    }
-}
+
 
     compileOptions {
+
         sourceCompatibility = JavaVersion.VERSION_17
+
         targetCompatibility = JavaVersion.VERSION_17
+
     }
+
 
     kotlinOptions {
+
         jvmTarget = "17"
+
     }
 
+
     buildFeatures {
+
         compose = true
+
     }
+
 }
 
 dependencies {
