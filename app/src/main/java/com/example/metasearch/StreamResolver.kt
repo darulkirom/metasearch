@@ -13,20 +13,33 @@ data class StreamSource(val url: String, val quality: Int?, val isHls: Boolean)
  * Mengambil link video yang bisa diputar langsung (mp4 / m3u8) dari halaman video.
  *
  * Cara kerjanya generik: halaman diunduh, lalu dicari URL yang berakhiran .mp4 atau .m3u8.
+ * Tiap kandidat diperiksa dulu (status HTTP dan jenis konten) sebelum dikirim ke pemutar,
+ * supaya halaman error atau file yang salah tidak sampai ke Vortex Player.
+ *
  * Kalau sebuah sumber menyembunyikan link di balik request lain (XHR/JS), hasilnya kosong
  * dan perlu resolver khusus untuk sumber itu.
  */
 class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
 
-    /** Pilih mp4 kualitas tertinggi; kalau tidak ada, pakai HLS (m3u8). */
+    /** Pilih mp4 kualitas tertinggi yang lolos pemeriksaan; HLS (m3u8) sebagai cadangan. */
     suspend fun resolveBest(pageUrl: String): StreamSource {
         val candidates = resolveAll(pageUrl)
-        return candidates.filter { !it.isHls }.maxByOrNull { it.quality ?: 0 }
-            ?: candidates.firstOrNull()
-            ?: throw IOException(
+        if (candidates.isEmpty()) {
+            throw IOException(
                 "Link video tidak ditemukan di halaman ini. " +
                     "Resolver perlu disesuaikan untuk sumber ini."
             )
+        }
+
+        val ordered = candidates.filter { !it.isHls }.sortedByDescending { it.quality ?: 0 } +
+            candidates.filter { it.isHls }
+
+        val problems = mutableListOf<String>()
+        for (candidate in ordered.take(MAX_TRIES)) {
+            val problem = check(candidate, pageUrl) ?: return candidate
+            problems.add(problem)
+        }
+        throw IOException("Link ditemukan tapi tidak bisa diputar:\n" + problems.joinToString("\n"))
     }
 
     suspend fun resolveAll(pageUrl: String): List<StreamSource> = withContext(Dispatchers.IO) {
@@ -60,6 +73,41 @@ class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
         }
     }
 
+    /** Mengembalikan null kalau link layak diputar, atau alasan gagalnya. */
+    private suspend fun check(source: StreamSource, pageUrl: String): String? =
+        withContext(Dispatchers.IO) {
+            val label = shorten(source.url)
+            try {
+                val request = Request.Builder()
+                    .url(source.url)
+                    .header("User-Agent", USER_AGENT)
+                    .header("Referer", pageUrl)
+                    .header("Range", "bytes=0-1023")
+                    .build()
+
+                client.newCall(request).execute().use { resp ->
+                    val type = resp.header("Content-Type").orEmpty().lowercase()
+                    when {
+                        resp.code != 200 && resp.code != 206 -> "HTTP ${resp.code}: $label"
+                        type.startsWith("text/html") || type.contains("json") ->
+                            "balasan $type, bukan video: $label"
+                        source.isHls &&
+                            resp.body?.string().orEmpty().trimStart().startsWith("#EXTM3U").not() ->
+                            "bukan playlist HLS: $label"
+                        else -> null
+                    }
+                }
+            } catch (e: IOException) {
+                "${e.javaClass.simpleName}: $label"
+            }
+        }
+
+    private fun shorten(url: String): String {
+        val uri = runCatching { URI.create(url) }.getOrNull() ?: return url.take(60)
+        val last = uri.path.orEmpty().substringAfterLast('/')
+        return "${uri.host}/…/${last.take(40)}"
+    }
+
     private fun normalize(raw: String, pageUrl: String): String = when {
         raw.startsWith("//") -> "https:$raw"
         raw.startsWith("http") -> raw
@@ -70,6 +118,8 @@ class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/124.0 Mobile Safari/537.36"
+
+        private const val MAX_TRIES = 4
 
         private val absoluteRegex =
             Regex("""(?:https?:)?//[^\s"'<>\\]+?\.(?:mp4|m3u8)(?:\?[^\s"'<>\\]*)?""")
