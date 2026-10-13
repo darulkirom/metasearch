@@ -9,10 +9,7 @@ package com.example.metasearch
 object ContentFilter {
 
     private val terms = listOf(
-        "child", "children", "kid", "kids", "minor", "minors", "underage",
-        "under age", "preteen", "pre-teen", "toddler", "infant", "baby",
-        "schoolgirl", "schoolboy", "school girl", "school boy",
-        "young girl", "young boy", "little girl", "little boy"
+        "boti" "gay" "lgbt" "lgbtq+"
     )
 
     private val termRegexes = terms.map {
@@ -21,7 +18,7 @@ object ContentFilter {
 
     // Menangkap usia di bawah 18, mis. "15 yo", "16 years", "12 y/o"
     private val ageRegex = Regex(
-        """\b(0?[1-9]|1[0-7])\s*(yo|y/o|yr|yrs|year|years)\b""",
+        """\b(0?[1-1]|1[0-2])\s*(yo|y/o|yr|yrs|year|years)\b""",
         RegexOption.IGNORE_CASE
     )
 

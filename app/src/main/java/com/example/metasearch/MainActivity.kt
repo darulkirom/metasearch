@@ -35,6 +35,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -86,31 +87,6 @@ class MainActivity : ComponentActivity() {
                 thumbKey = "default_thumb.src",
                 linkKey = "url",
                 tagsKey = "keywords"
-            ),
-            // RedTube API (https://api.redtube.com/). BELUM DIVERIFIKASI: format dari ingatan,
-            // objek video dibungkus di dalam key "video". Kalau gagal, errornya tampil di layar.
-            JsonFeedAdapter(
-                name = "RedTube",
-                urlTemplate = "https://api.redtube.com/" +
-                    "?data=redtube.Videos.searchVideos&output=json" +
-                    "&search={query}&page={page}&thumbsize=big",
-                listPath = "videos",
-                titleKey = "video.title",
-                thumbKey = "video.default_thumb",
-                linkKey = "video.url",
-                tagsKey = "video.tags"
-            ),
-            // Pornhub Webmasters API (https://www.pornhub.com/webmasters). BELUM DIVERIFIKASI:
-            // format dari ingatan. Kalau gagal, errornya tampil di layar.
-            JsonFeedAdapter(
-                name = "Pornhub",
-                urlTemplate = "https://www.pornhub.com/webmasters/search" +
-                    "?search={query}&page={page}&thumbsize=large",
-                listPath = "videos",
-                titleKey = "title",
-                thumbKey = "default_thumb",
-                linkKey = "url",
-                tagsKey = "tags"
             )
         )
     )
@@ -129,7 +105,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                SearchScreen(vm)
+                // Surface wajib ada: dia yang menyetel warna teks default (onBackground).
+                // Tanpa Surface, Text tanpa warna eksplisit jadi hitam di atas latar gelap.
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    SearchScreen(vm)
+                }
             }
         }
     }
@@ -285,17 +268,6 @@ private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit, onError: (String
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Kalau sebagian sumber gagal tapi yang lain berhasil, kasih tahu sumber mana
-        if (state.errors.isNotEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "source-errors") {
-                Text(
-                    "Sumber gagal: " + state.errors.joinToString("; "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-
         items(state.results, key = { it.url }) { ResultCard(it, onError) }
 
         if (state.loadingMore) {
