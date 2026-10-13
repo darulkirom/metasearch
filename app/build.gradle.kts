@@ -13,7 +13,7 @@ android {
 
     signingConfigs {
 
-        create("debug") {
+        create("aospTest") {
 
             storeFile = file("testkey.keystore")
 
@@ -25,7 +25,7 @@ android {
             
             enableV1Signing = true
             enableV2Signing = true
-            enableV3Signing = true
+           
 
         }
 
@@ -54,7 +54,7 @@ android {
             isMinifyEnabled = false
 
             signingConfig =
-                signingConfigs.getByName("debug")
+                signingConfigs.getByName("aospTest")
 
         }
 
