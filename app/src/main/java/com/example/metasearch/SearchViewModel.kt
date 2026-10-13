@@ -2,7 +2,15 @@ package com.example.metasearch
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +31,8 @@ data class UiState(
 
 class SearchViewModel(
     private val repo: SearchRepository,
-    private val historyStore: SearchHistory
+    private val historyStore: SearchHistory,
+    private val suggestionProvider: SuggestionProvider = SuggestionProvider()
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(UiState())
@@ -31,6 +40,42 @@ class SearchViewModel(
 
     val history: StateFlow<List<String>> = historyStore.queries
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // Teks yang sedang diketik, dipakai untuk saran
+    private val typing = MutableStateFlow("")
+
+    fun onQueryChange(text: String) {
+        typing.value = text
+    }
+
+    /**
+     * Saran kata kunci: riwayat yang cocok tampil duluan (instan), lalu saran online menyusul.
+     * Query yang kena ContentFilter tidak diproses, dan saran online disaring dengan filter yang sama.
+     */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    val suggestions: StateFlow<List<String>> = typing
+        .debounce(250)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { q ->
+            if (q.isEmpty() || ContentFilter.isBlocked(q)) {
+                flowOf(emptyList<String>())
+            } else {
+                flow {
+                    val local = history.value.filter { it.contains(q, ignoreCase = true) }.take(3)
+                    emit(cleanSuggestions(q, local))
+                    emit(cleanSuggestions(q, local + suggestionProvider.fetch(q)))
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun cleanSuggestions(query: String, items: List<String>): List<String> =
+        items.map { it.trim() }
+            .filter { it.isNotEmpty() && !it.equals(query, ignoreCase = true) }
+            .filterNot { ContentFilter.isBlocked(it) }
+            .distinctBy { it.lowercase() }
+            .take(8)
 
     private var currentQuery = ""
     private var page = 1
