@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -26,9 +25,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -110,6 +115,10 @@ private fun SearchScreen(vm: SearchViewModel) {
     val state by vm.state.collectAsState()
     val history by vm.history.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    // Pesan error yang ditampilkan di dialog (bisa disalin). null = dialog tertutup.
+    var errorText by rememberSaveable { mutableStateOf<String?>(null) }
+
+    errorText?.let { ErrorDialog(it, onDismiss = { errorText = null }) }
 
     Column(
         Modifier
@@ -147,7 +156,11 @@ private fun SearchScreen(vm: SearchViewModel) {
                     state.errors,
                     Modifier.align(Alignment.Center)
                 )
-                else -> ResultsGrid(state = state, onLoadMore = vm::loadMore)
+                else -> ResultsGrid(
+                    state = state,
+                    onLoadMore = vm::loadMore,
+                    onError = { errorText = it }
+                )
             }
         }
     }
@@ -160,12 +173,16 @@ private fun EmptyState(errors: List<String>, modifier: Modifier = Modifier) {
             Text("Tidak ada hasil.")
         } else {
             Text("Sumber gagal dimuat:", style = MaterialTheme.typography.titleSmall)
-            errors.forEach {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+            SelectionContainer {
+                Column {
+                    errors.forEach {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
             Text(
                 "Cek koneksi. Kalau situsnya diblokir ISP, coba ganti Private DNS atau pakai VPN.",
@@ -217,7 +234,7 @@ private fun HistoryList(
 }
 
 @Composable
-private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit) {
+private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit, onError: (String) -> Unit) {
     // State grid dibuat ulang tiap pencarian baru (grid keluar dari komposisi saat loading),
     // jadi posisi scroll otomatis kembali ke atas.
     val gridState = rememberLazyGridState()
@@ -243,7 +260,7 @@ private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(state.results, key = { it.url }) { ResultCard(it) }
+        items(state.results, key = { it.url }) { ResultCard(it, onError) }
 
         if (state.loadingMore) {
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -256,7 +273,7 @@ private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit) {
 }
 
 @Composable
-private fun ResultCard(result: SearchResult) {
+private fun ResultCard(result: SearchResult, onError: (String) -> Unit) {
     val context = LocalContext.current
     // Thumbnail blur sampai diketuk sekali; ketukan kedua buka link
     var revealed by remember(result.url) { mutableStateOf(false) }
@@ -281,11 +298,14 @@ private fun ResultCard(result: SearchResult) {
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            Toast.makeText(
-                                context,
-                                e.message ?: "Gagal mengambil link video",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            onError(
+                                buildString {
+                                    appendLine(result.title)
+                                    appendLine(result.url)
+                                    appendLine()
+                                    append(e.message ?: e.toString())
+                                }
+                            )
                         } finally {
                             resolving = false
                         }
@@ -328,4 +348,34 @@ private fun ResultCard(result: SearchResult) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+@Composable
+private fun ErrorDialog(text: String, onDismiss: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember(text) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gagal memutar video") },
+        text = {
+            // Teks bisa diseleksi manual (tekan lama) atau disalin semua lewat tombol Salin
+            SelectionContainer {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(text))
+                copied = true
+            }) { Text(if (copied) "Tersalin ✓" else "Salin") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
 }
