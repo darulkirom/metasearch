@@ -5,84 +5,53 @@ plugins {
 }
 
 android {
-
     namespace = "com.example.metasearch"
-
     compileSdk = 35
 
+    defaultConfig {
+        applicationId = "com.example.metasearch"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
 
+    // Kunci tes AOSP: taruh file testkey.keystore di folder app/ (sejajar build.gradle.kts ini).
     signingConfigs {
-
         create("aospTest") {
-
             storeFile = file("testkey.keystore")
-
             storePassword = "android"
-
             keyAlias = "testkey"
-
             keyPassword = "android"
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
-           
-
         }
-
     }
-
-
-    defaultConfig {
-
-        applicationId = "com.example.metasearch"
-
-        minSdk = 26
-
-        targetSdk = 35
-
-        versionCode = 1
-
-        versionName = "1.0"
-
-    }
-
 
     buildTypes {
-
-        release {
-
-            isMinifyEnabled = false
-
-            signingConfig =
-                signingConfigs.getByName("aospTest")
-
+        // debug juga ditandatangani kunci yang sama, karena workflow GitHub Actions membangun debug
+        debug {
+            signingConfig = signingConfigs.getByName("aospTest")
         }
-
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("aospTest")
+        }
     }
-
 
     compileOptions {
-
         sourceCompatibility = JavaVersion.VERSION_17
-
         targetCompatibility = JavaVersion.VERSION_17
-
     }
-
 
     kotlinOptions {
-
         jvmTarget = "17"
-
     }
-
 
     buildFeatures {
-
         compose = true
-
     }
-
 }
 
 dependencies {
