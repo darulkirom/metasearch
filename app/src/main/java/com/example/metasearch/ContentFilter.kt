@@ -9,7 +9,7 @@ package com.example.metasearch
 object ContentFilter {
 
     private val terms = listOf(
-        "boti" "gay" "lgbt" "lgbtq+"
+        "boti", "gay", "lgbt", "lgbtq+"
     )
 
     private val termRegexes = terms.map {
