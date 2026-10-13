@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -41,6 +42,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+private val streamResolver = StreamResolver()
 
 class MainActivity : ComponentActivity() {
 
@@ -254,17 +260,37 @@ private fun ResultCard(result: SearchResult) {
     val context = LocalContext.current
     // Thumbnail blur sampai diketuk sekali; ketukan kedua buka link
     var revealed by remember(result.url) { mutableStateOf(false) }
+    var resolving by remember(result.url) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     // Modifier.blur baru berfungsi di Android 12+; di bawah itu pakai scrim hampir solid
     val scrimAlpha = if (Build.VERSION.SDK_INT >= 31) 0.25f else 0.92f
 
     Column(
         Modifier
             .clip(RoundedCornerShape(10.dp))
-            .clickable {
-                if (!revealed) revealed = true
-                else context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(result.url))
-                )
+            .clickable(enabled = !resolving) {
+                if (!revealed) {
+                    revealed = true
+                } else {
+                    // Ketukan kedua: ambil link video langsung, lalu kirim ke Vortex Player
+                    resolving = true
+                    scope.launch {
+                        try {
+                            val stream = streamResolver.resolveBest(result.url)
+                            VortexLauncher.play(context, stream, result.title, result.url)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                e.message ?: "Gagal mengambil link video",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } finally {
+                            resolving = false
+                        }
+                    }
+                }
             }
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))) {
@@ -281,6 +307,12 @@ private fun ResultCard(result: SearchResult) {
             )
             if (!revealed) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha)))
+            }
+            if (resolving) {
+                Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
             }
         }
         Text(
