@@ -137,12 +137,35 @@ private fun SearchScreen(vm: SearchViewModel) {
                     onRemove = vm::removeHistory,
                     onClear = vm::clearHistory
                 )
-                state.results.isEmpty() -> Text(
-                    "Tidak ada hasil.",
+                state.results.isEmpty() -> EmptyState(
+                    state.errors,
                     Modifier.align(Alignment.Center)
                 )
                 else -> ResultsGrid(state = state, onLoadMore = vm::loadMore)
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(errors: List<String>, modifier: Modifier = Modifier) {
+    Column(modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (errors.isEmpty()) {
+            Text("Tidak ada hasil.")
+        } else {
+            Text("Sumber gagal dimuat:", style = MaterialTheme.typography.titleSmall)
+            errors.forEach {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            Text(
+                "Cek koneksi. Kalau situsnya diblokir ISP, coba ganti Private DNS atau pakai VPN.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }

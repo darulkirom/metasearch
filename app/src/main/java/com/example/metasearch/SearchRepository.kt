@@ -1,5 +1,6 @@
 package com.example.metasearch
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -15,17 +16,31 @@ class SearchRepository(private val adapters: List<SearchAdapter>) {
         val perSource = coroutineScope {
             adapters.map { adapter ->
                 async {
-                    // Satu sumber gagal tidak boleh menjatuhkan sumber lain
-                    runCatching { adapter.search(q, page) }.getOrDefault(emptyList())
+                    // Satu sumber gagal tidak boleh menjatuhkan sumber lain,
+                    // tapi errornya dicatat supaya bisa ditampilkan di UI
+                    try {
+                        SourceResult(adapter.search(q, page), null)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        SourceResult(
+                            emptyList(),
+                            "${adapter.name}: ${e.javaClass.simpleName}: ${e.message}"
+                        )
+                    }
                 }
             }.awaitAll()
         }
 
-        val merged = interleave(perSource)
+        val merged = interleave(perSource.map { it.items })
             .filterNot { ContentFilter.isBlocked(it.title) || ContentFilter.isBlocked(it.tags) }
             .distinctBy { it.url }
 
-        return SearchOutcome(merged, blocked = false)
+        return SearchOutcome(
+            results = merged,
+            blocked = false,
+            errors = perSource.mapNotNull { it.error }
+        )
     }
 
     // Selang-seling antar sumber supaya satu situs tidak memenuhi bagian atas
@@ -39,4 +54,10 @@ class SearchRepository(private val adapters: List<SearchAdapter>) {
     }
 }
 
-data class SearchOutcome(val results: List<SearchResult>, val blocked: Boolean)
+private data class SourceResult(val items: List<SearchResult>, val error: String?)
+
+data class SearchOutcome(
+    val results: List<SearchResult>,
+    val blocked: Boolean,
+    val errors: List<String> = emptyList()
+)

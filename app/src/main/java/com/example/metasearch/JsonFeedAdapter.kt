@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.URLEncoder
 
 /**
@@ -40,10 +41,10 @@ class JsonFeedAdapter(
                 .build()
 
             client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return@use emptyList()
-                val body = resp.body?.string() ?: return@use emptyList()
+                if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
+                val body = resp.body?.string() ?: throw IOException("Respons kosong")
                 val arr = resolve(JSONObject(body), listPath) as? JSONArray
-                    ?: return@use emptyList()
+                    ?: throw IOException("Format respons tidak cocok (path '$listPath' tidak ada)")
 
                 (0 until arr.length()).mapNotNull { i ->
                     val item = arr.optJSONObject(i) ?: return@mapNotNull null

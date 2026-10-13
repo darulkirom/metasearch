@@ -17,7 +17,8 @@ data class UiState(
     val searched: Boolean = false,
     val blocked: Boolean = false,
     val endReached: Boolean = false,
-    val results: List<SearchResult> = emptyList()
+    val results: List<SearchResult> = emptyList(),
+    val errors: List<String> = emptyList()
 )
 
 class SearchViewModel(
@@ -49,7 +50,8 @@ class SearchViewModel(
                 searched = true,
                 blocked = outcome.blocked,
                 endReached = outcome.blocked || outcome.results.isEmpty(),
-                results = outcome.results
+                results = outcome.results,
+                errors = outcome.errors
             )
         }
     }
