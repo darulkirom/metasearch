@@ -293,8 +293,8 @@ private fun ResultCard(result: SearchResult, onError: (String) -> Unit) {
                     resolving = true
                     scope.launch {
                         try {
-                            val stream = streamResolver.resolveBest(result.url)
-                            VortexLauncher.play(context, stream, result.title, result.url)
+                            val streams = streamResolver.resolveValid(result.url)
+                            VortexLauncher.play(context, streams, result.title, result.url)
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {

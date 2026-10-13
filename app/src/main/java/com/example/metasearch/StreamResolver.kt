@@ -21,8 +21,11 @@ data class StreamSource(val url: String, val quality: Int?, val isHls: Boolean)
  */
 class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
 
-    /** Pilih mp4 kualitas tertinggi yang lolos pemeriksaan; HLS (m3u8) sebagai cadangan. */
-    suspend fun resolveBest(pageUrl: String): StreamSource {
+    /**
+     * Semua link yang lolos pemeriksaan: mp4 dari kualitas tertinggi ke terendah, lalu HLS (m3u8).
+     * Elemen pertama adalah pilihan terbaik; sisanya jadi pilihan kualitas di pemutar.
+     */
+    suspend fun resolveValid(pageUrl: String): List<StreamSource> {
         val candidates = resolveAll(pageUrl)
         if (candidates.isEmpty()) {
             throw IOException(
@@ -35,11 +38,17 @@ class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
             candidates.filter { it.isHls }
 
         val problems = mutableListOf<String>()
+        val valid = mutableListOf<StreamSource>()
         for (candidate in ordered.take(MAX_TRIES)) {
-            val problem = check(candidate, pageUrl) ?: return candidate
-            problems.add(problem)
+            val problem = check(candidate, pageUrl)
+            if (problem == null) valid.add(candidate) else problems.add(problem)
         }
-        throw IOException("Link ditemukan tapi tidak bisa diputar:\n" + problems.joinToString("\n"))
+        if (valid.isEmpty()) {
+            throw IOException(
+                "Link ditemukan tapi tidak bisa diputar:\n" + problems.joinToString("\n")
+            )
+        }
+        return valid
     }
 
     suspend fun resolveAll(pageUrl: String): List<StreamSource> = withContext(Dispatchers.IO) {
@@ -119,7 +128,7 @@ class StreamResolver(private val client: OkHttpClient = OkHttpClient()) {
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/124.0 Mobile Safari/537.36"
 
-        private const val MAX_TRIES = 4
+        private const val MAX_TRIES = 8
 
         private val absoluteRegex =
             Regex("""(?:https?:)?//[^\s"'<>\\]+?\.(?:mp4|m3u8)(?:\?[^\s"'<>\\]*)?""")
