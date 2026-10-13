@@ -43,8 +43,14 @@ class JsonFeedAdapter(
             client.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
                 val body = resp.body?.string() ?: throw IOException("Respons kosong")
-                val arr = resolve(JSONObject(body), listPath) as? JSONArray
-                    ?: throw IOException("Format respons tidak cocok (path '$listPath' tidak ada)")
+                val root = JSONObject(body)
+                val arr = resolve(root, listPath) as? JSONArray
+                    ?: run {
+                        // Beberapa API membalas {"code":..., "message":"No Videos Found"} saat kosong
+                        val msg = root.optString("message")
+                        if (msg.isNotBlank()) return@use emptyList()
+                        throw IOException("Format respons tidak cocok (path '$listPath' tidak ada)")
+                    }
 
                 (0 until arr.length()).mapNotNull { i ->
                     val item = arr.optJSONObject(i) ?: return@mapNotNull null
