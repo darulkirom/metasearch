@@ -89,6 +89,31 @@ class MainActivity : ComponentActivity() {
                 thumbKey = "default_thumb.src",
                 linkKey = "url",
                 tagsKey = "keywords"
+            ),
+            // RedTube API (https://api.redtube.com/). BELUM DIVERIFIKASI: format dari ingatan,
+            // objek video dibungkus di dalam key "video". Kalau gagal, errornya tampil di layar.
+            JsonFeedAdapter(
+                name = "RedTube",
+                urlTemplate = "https://api.redtube.com/" +
+                    "?data=redtube.Videos.searchVideos&output=json" +
+                    "&search={query}&page={page}&thumbsize=big",
+                listPath = "videos",
+                titleKey = "video.title",
+                thumbKey = "video.default_thumb",
+                linkKey = "video.url",
+                tagsKey = "video.tags"
+            ),
+            // Pornhub Webmasters API (https://www.pornhub.com/webmasters). BELUM DIVERIFIKASI:
+            // format dari ingatan. Kalau gagal, errornya tampil di layar.
+            JsonFeedAdapter(
+                name = "Pornhub",
+                urlTemplate = "https://www.pornhub.com/webmasters/search" +
+                    "?search={query}&page={page}&thumbsize=large",
+                listPath = "videos",
+                titleKey = "title",
+                thumbKey = "default_thumb",
+                linkKey = "url",
+                tagsKey = "tags"
             )
         )
     )
