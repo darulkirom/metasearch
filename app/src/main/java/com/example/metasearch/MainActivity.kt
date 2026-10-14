@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -55,6 +56,7 @@ import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -125,6 +127,18 @@ private fun SearchScreen(vm: SearchViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     // Pesan error yang ditampilkan di dialog (bisa disalin). null = dialog tertutup.
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
+    val suggestions by vm.suggestions.collectAsState()
+    var showSuggestions by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
+    // Dipakai oleh tombol cari di keyboard, ketukan saran, dan ketukan riwayat
+    fun submit(text: String) {
+        query = text
+        showSuggestions = false
+        vm.onQueryChange("")
+        focusManager.clearFocus()
+        vm.search(text)
+    }
 
     errorText?.let { ErrorDialog(it, onDismiss = { errorText = null }) }
 
@@ -136,12 +150,16 @@ private fun SearchScreen(vm: SearchViewModel) {
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = { query = it },
+            onValueChange = {
+                query = it
+                showSuggestions = true
+                vm.onQueryChange(it)
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             placeholder = { Text("Cari...") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { vm.search(query) })
+            keyboardActions = KeyboardActions(onSearch = { submit(query) })
         )
 
         Box(Modifier.fillMaxSize().padding(top = 12.dp)) {
@@ -153,10 +171,7 @@ private fun SearchScreen(vm: SearchViewModel) {
                 )
                 !state.searched -> HistoryList(
                     items = history,
-                    onPick = { picked ->
-                        query = picked
-                        vm.search(picked)
-                    },
+                    onPick = { submit(it) },
                     onRemove = vm::removeHistory,
                     onClear = vm::clearHistory
                 )
@@ -169,6 +184,50 @@ private fun SearchScreen(vm: SearchViewModel) {
                     onLoadMore = vm::loadMore,
                     onError = { errorText = it }
                 )
+            }
+            if (showSuggestions && suggestions.isNotEmpty()) {
+                SuggestionList(
+                    items = suggestions,
+                    onPick = { submit(it) },
+                    // Panah ↖: isi kolom cari tanpa langsung mencari
+                    onFill = {
+                        query = it
+                        vm.onQueryChange(it)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionList(
+    items: List<String>,
+    onPick: (String) -> Unit,
+    onFill: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 6.dp,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        LazyColumn(Modifier.heightIn(max = 360.dp)) {
+            items(items, key = { it }) { s ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(s) }
+                        .padding(start = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        s,
+                        Modifier.weight(1f).padding(vertical = 12.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    TextButton(onClick = { onFill(s) }) { Text("↖") }
+                }
             }
         }
     }
