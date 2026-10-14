@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -34,6 +37,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,7 +78,10 @@ import kotlinx.coroutines.launch
 
 private val streamResolver = StreamResolver()
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+
+    // Kunci aplikasi (PIN / pola / sidik jari): lihat LockStore.kt dan LockUi.kt
+    private val lock by lazy { AppLock(this) }
 
     // Daftar sumber. Tambah sumber baru = tambah satu adapter di sini.
     // Isi endpoint dan nama field dari dokumentasi resmi situs yang lo pilih.
@@ -130,6 +139,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lock.applyWindowFlags()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 // Surface wajib ada: dia yang menyetel warna teks default (onBackground).
@@ -138,10 +148,20 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SearchScreen(vm)
+                    lock.Gate { SearchScreen(vm) }
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        lock.onReturn()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        lock.onLeave(isChangingConfigurations)
     }
 }
 
@@ -204,11 +224,18 @@ private fun SearchScreen(vm: SearchViewModel) {
                     state.errors,
                     Modifier.align(Alignment.Center)
                 )
-                else -> ResultsGrid(
-                    state = state,
-                    onLoadMore = vm::loadMore,
-                    onError = { errorText = it }
-                )
+                else -> Column {
+                    ResultsHeader(state = state, onSelect = vm::selectSource)
+                    // key: ganti filter = grid dibuat ulang, scroll kembali ke atas
+                    key(state.selectedSource) {
+                        ResultsGrid(
+                            results = state.visible,
+                            loadingMore = state.loadingMore,
+                            onLoadMore = vm::loadMore,
+                            onError = { errorText = it }
+                        )
+                    }
+                }
             }
             if (showSuggestions && suggestions.isNotEmpty()) {
                 SuggestionList(
@@ -325,8 +352,53 @@ private fun HistoryList(
     }
 }
 
+/** Total hasil + chip filter per situs sumber. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit, onError: (String) -> Unit) {
+private fun ResultsHeader(state: UiState, onSelect: (String?) -> Unit) {
+    val counts = remember(state.results) {
+        state.results.groupingBy { it.source }.eachCount().toList()
+    }
+    // Tanda "+" = masih ada halaman berikutnya, jadi totalnya baru sejauh yang sudah dimuat
+    val more = if (state.endReached) "" else "+"
+    val total = state.results.size
+
+    Column {
+        Text(
+            if (state.selectedSource == null) "$total$more hasil"
+            else "${state.visible.size} dari $total$more hasil",
+            style = MaterialTheme.typography.labelLarge
+        )
+        if (counts.size > 1) {
+            Spacer(Modifier.height(4.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    FilterChip(
+                        selected = state.selectedSource == null,
+                        onClick = { onSelect(null) },
+                        label = { Text("Semua ($total)") }
+                    )
+                }
+                items(counts, key = { it.first }) { (name, n) ->
+                    FilterChip(
+                        selected = state.selectedSource == name,
+                        onClick = { onSelect(name) },
+                        label = { Text("$name ($n)") }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ResultsGrid(
+    results: List<SearchResult>,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    onError: (String) -> Unit
+) {
     // State grid dibuat ulang tiap pencarian baru (grid keluar dari komposisi saat loading),
     // jadi posisi scroll otomatis kembali ke atas.
     val gridState = rememberLazyGridState()
@@ -341,7 +413,7 @@ private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit, onError: (String
 
     // results.size ikut jadi key: kalau halaman baru masih pendek dan akhir daftar
     // tetap terlihat, pemuatan berikutnya dipicu lagi.
-    LaunchedEffect(nearEnd, state.results.size) {
+    LaunchedEffect(nearEnd, results.size) {
         if (nearEnd) onLoadMore()
     }
 
@@ -352,9 +424,9 @@ private fun ResultsGrid(state: UiState, onLoadMore: () -> Unit, onError: (String
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(state.results, key = { it.url }) { ResultCard(it, onError) }
+        items(results, key = { it.url }) { ResultCard(it, onError) }
 
-        if (state.loadingMore) {
+        if (loadingMore) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
