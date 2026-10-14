@@ -26,8 +26,14 @@ data class UiState(
     val blocked: Boolean = false,
     val endReached: Boolean = false,
     val results: List<SearchResult> = emptyList(),
-    val errors: List<String> = emptyList()
-)
+    val errors: List<String> = emptyList(),
+    // Nama situs yang dipilih di filter; null = semua sumber
+    val selectedSource: String? = null
+) {
+    /** Hasil yang ditampilkan: semua, atau hanya dari situs yang dipilih. */
+    val visible: List<SearchResult>
+        get() = selectedSource?.let { s -> results.filter { it.source == s } } ?: results
+}
 
 class SearchViewModel(
     private val repo: SearchRepository,
@@ -123,6 +129,10 @@ class SearchViewModel(
                 _state.update { it.copy(loadingMore = false, results = it.results + fresh) }
             }
         }
+    }
+
+    fun selectSource(source: String?) {
+        _state.update { it.copy(selectedSource = source) }
     }
 
     fun removeHistory(query: String) {
